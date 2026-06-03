@@ -25,12 +25,12 @@ num_voltas = 2; % Quantidade de voltas (aproximadamente)
 % O 28BYJ-48 tem cerca de 4096 passos por volta
 passos_totais = 4096 * num_voltas; 
 
-passo_base = movimento(motor_base);
-passo_braco1 = movimento(motor_braco1);
-passo_braco2 = movimento(motor_braco2);
+movimento(placa, motor_base, passos_totais,delay, step_seq);
+movimento(placa, motor_braco1, passos_totais,delay, step_seq);
+movimento(placa, motor_braco2, passos_totais,delay, step_seq);
 
 % 5. Limpa a conexão ao terminar
-clear a;
+clear placa;
 
 function passo = movimento(placa, motor, passos_totais, delay, step_seq)
 
