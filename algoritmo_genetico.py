@@ -74,5 +74,6 @@ while nova_posicao > erro:
     theta1 = float(d_theta1[distancia.index(nova_posicao)])
     theta2 = float(d_theta2[distancia.index(nova_posicao)])
     
+    print(nova_posicao)
 
 print(iteracao)
