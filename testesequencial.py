@@ -12,7 +12,7 @@ PORTA_SERIAL = '/dev/ttyUSB0'
 BAUD_RATE = 115200
 
 try:
-    arduino = serial.Serial(PORTA_SERIAL, BAUD_RATE, timeout=1)
+    arduino = serial.Serial(PORTA_SERIAL, BAUD_RATE, timeout=20)
     time.sleep(2) # Aguarda o Arduino resetar ao abrir a serial
     print("Conexão serial estabelecida.")
 except Exception as e:
@@ -65,15 +65,17 @@ def converter_para_passos(angulos_rad):
     """Converte o vetor de ângulos radianos para posição absoluta em passos do motor."""
     passos = []
     for angulo in angulos_rad:
-        graus = math.degrees(angulo)
+        angulo_normalizado = math.atan2(math.sin(angulo), math.cos(angulo))
+        
+        graus = math.degrees(angulo_normalizado)
         qtd_passos = int((graus / 360.0) * PASSOS_POR_REVOLUCAO)
         passos.append(qtd_passos)
+        
     return passos
-
 def enviar_para_arduino(passos):
     """Envia os passos formatados como uma string: <P1,P2,P3>"""
     if arduino and arduino.is_open:
-        comando = f"<{passos[0]},{passos[1]},{passos[2]}>\n"
+        comando = f"<{passos[0]},{passos[1]},{passos[2]/2}>\n"
         arduino.write(comando.encode('utf-8'))
         print(f"Enviado: {comando.strip()}")
         
@@ -84,13 +86,17 @@ def enviar_para_arduino(passos):
         print("Serial inativa. Comando simulado:", f"<{passos[0]},{passos[1]},{passos[2]}>")
 
 # execucao principal
-q_atual = [0.0, 0.0, 0.0] 
-
-alvo_x, alvo_y, alvo_z = 100, 50, 0
+q_atual = [
+    math.radians(0), 
+    math.radians(45), 
+    math.radians(-90)
+]
+alvo_x, alvo_y, alvo_z = 100, 100, 10
 
 print(f"Calculando cinemática para atingir: X={alvo_x}, Y={alvo_y}, Z={alvo_z}")
 q_novo = solve(q_atual[0], q_atual[1], q_atual[2], alvo_x, alvo_y, alvo_z)
 
+print(f"angulos:{q_novo[0]}, {q_novo[1]}, {q_novo[2]}")
 passos_alvo = converter_para_passos(q_novo)
 print(f"Passos calculados: Base={passos_alvo[0]}, Ombro={passos_alvo[1]}, Cotovelo={passos_alvo[2]}")
 
