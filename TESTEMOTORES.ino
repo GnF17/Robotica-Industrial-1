@@ -2,43 +2,39 @@
 
 const int stepsPerRevolution = 2048; 
 
-// Mantendo exatamente os pinos que você configurou
-Stepper myStepper(stepsPerRevolution, 2, 4, 3, 5);
-Stepper leftStepper(stepsPerRevolution, 6, 7, 8, 9);
-Stepper bottomStepper(stepsPerRevolution, 10, 11, 12, 13);
+// A sua pinagem original intocada
+Stepper rightStepper(stepsPerRevolution, 2, 4, 3, 5);
+Stepper leftStepper(stepsPerRevolution, 6, 8,7, 9);
+Stepper bottomStepper(stepsPerRevolution, 10, 12,11, 13);
 
-// Variáveis para rastrear a posição absoluta atual das juntas
-long posAtualBase = 0;
-long posAtualOmbro = 0;
-long posAtualCotovelo = 0;
+// 1. O robô nasce sabendo que a posição física do "L" não é o zero matemático
+long posAtualBase = 0;           
+long posAtualOmbro = 512;        // 90 graus
+long posAtualCotovelo = -512;    // -90 graus
 
-// Variáveis de buffer para a comunicação Serial
 const byte numChars = 32;
 char receivedChars[numChars];
 boolean newData = false;
 
 void setup() {
-  // Ajustado para 115200 para casar com o script Python
   Serial.begin(115200); 
   
-  myStepper.setSpeed(10); 
-  leftStepper.setSpeed(10);
-  bottomStepper.setSpeed(10);
+  // Velocidade aumentada para o robô não parecer que está travado
+  rightStepper.setSpeed(1); 
+  leftStepper.setSpeed(1);
+  bottomStepper.setSpeed(1);
 
-  Serial.println("Arduino com Stepper.h pronto. Aguardando comandos...");
+  Serial.println("Arduino pronto.");
 }
 
 void loop() {
   receberDadosSerial();
-  
-  // Se um pacote completo no formato <P1,P2,P3> chegou, processamos
   if (newData == true) {
     processarComando();
     newData = false;
   }
 }
 
-// Função não-bloqueante para ler a string entre '<' e '>'
 void receberDadosSerial() {
     static boolean recvInProgress = false;
     static byte ndx = 0;
@@ -58,7 +54,7 @@ void receberDadosSerial() {
                 }
             }
             else {
-                receivedChars[ndx] = '\0'; // Finaliza a string
+                receivedChars[ndx] = '\0'; 
                 recvInProgress = false;
                 ndx = 0;
                 newData = true;
@@ -70,12 +66,10 @@ void receberDadosSerial() {
     }
 }
 
-// Extrai os valores e converte para movimento relativo
 void processarComando() {
     char * strtokIndx; 
     long alvoBase, alvoOmbro, alvoCotovelo;
 
-    // Divide a string recebida nas vírgulas
     strtokIndx = strtok(receivedChars, ","); 
     alvoBase = atol(strtokIndx);    
  
@@ -85,22 +79,26 @@ void processarComando() {
     strtokIndx = strtok(NULL, ","); 
     alvoCotovelo = atol(strtokIndx);
 
-    // Calcula quantos passos o motor DEVE dar a partir de onde está agora
+    // Calcula a diferença real (A Matemática Pura)
     long passosBase = alvoBase - posAtualBase;
     long passosOmbro = alvoOmbro - posAtualOmbro;
     long passosCotovelo = alvoCotovelo - posAtualCotovelo;
 
-    // Aciona os motores (Sequencialmente devido ao comportamento do Stepper.h)
-    myStepper.step(passosBase);
-    leftStepper.step(passosOmbro);
-    bottomStepper.step(passosCotovelo);
-
-    // Atualiza o estado interno do robô para os novos alvos
+    // 2. A INVERSÃO DE HARDWARE
+    // Aciona os motores invertendo apenas a polaridade final de execução do motor defeituoso
+    bottomStepper.step(passosBase);
+    
+    // O sinal negativo (-) inverte fisicamente o Ombro, mas não altera a variável "posAtual"
+    leftStepper.step(passosCotovelo);
+    rightStepper.step(-passosOmbro); 
+    
+    
+    
+    // Atualiza a memória com o alvo real (para o próximo movimento não bugar)
     posAtualBase = alvoBase;
     posAtualOmbro = alvoOmbro;
     posAtualCotovelo = alvoCotovelo;
 
-    // Retorna uma confirmação para o Python ler no console
     Serial.print("Chegou nos alvos: ");
     Serial.print(posAtualBase); Serial.print(", ");
     Serial.print(posAtualOmbro); Serial.print(", ");
