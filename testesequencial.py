@@ -3,8 +3,8 @@ import numpy as np
 import serial
 import time
 
+L1 = 90.0
 L2 = 90.0
-L3 = 90.0
 OFFSET_R = 30.0
 OFFSET_Z = 40.0
 PASSOS_POR_REVOLUCAO = 4096
@@ -22,61 +22,45 @@ except Exception as e:
 
 
 def calc_x(theta1, theta2, theta3):
-    return math.cos(theta1) * (L2 * math.cos(theta2) + L3 * math.cos(theta2 + theta3))
-
+    return math.cos(theta1) * (L2 * math.cos(theta2+theta3) + L1 * math.cos(theta2) + OFFSET_R)
 
 def calc_y(theta1, theta2, theta3):
-    return math.sin(theta1) * (L2 * math.cos(theta2) + L3 * math.cos(theta2 + theta3))
-
+    return math.sin(theta1) * (L2 * math.cos(theta2 + theta3) + L1 * math.cos(theta2) + OFFSET_R)
 
 def calc_z(theta1, theta2, theta3):
-    return L2 * math.sin(theta2) + L3 * math.sin(theta2 + theta3)
+    return L2 * math.sin(theta2 + theta3) + L1 * math.sin(theta2) + OFFSET_Z
 
+def inverse_jacobian(theta1, theta2, theta3):
+    alpha1 = L1 * L2 * math.sin(theta3)
+    alpha4 = L2 * math.cos(theta2 + theta3)
+    alpha2 = OFFSET_R + alpha4 + L1 * math.cos(theta2)
+    alpha3 = alpha4 + L1 * math.cos(theta2)
 
-def jacobian(theta1, theta2, theta3):
-    dxdt1 = -math.sin(theta1) * (L2 * math.cos(theta2) + L3 * math.cos(theta2 + theta3))
-    dxdt2 = -math.cos(theta1) * (L2 * math.sin(theta2) + L3 * math.sin(theta2 + theta3))
-    dxdt3 = -math.cos(theta1) * L3 * math.sin(theta2 + theta3)
+    J11 = -math.sin(theta1) / alpha2
+    J12 = math.cos(theta1) / alpha2
+    J13 = 0
+    J21 = math.cos(theta2 + theta3) * math.cos(theta1) / (L1 * math.sin(theta3))
+    J22 = math.cos(theta2 + theta3) * math.sin(theta1) / (L1 * math.sin(theta3))
+    J23 = math.sin(theta2 + theta3) / (L1 * math.sin(theta3))
+    J31 = -math.cos(theta1) * alpha3 / alpha1
+    J32 = -math.sin(theta1) * alpha3 / alpha1
+    J33 = - (L2 * math.sin(theta2 + theta3) + L1 * math.sin(theta2)) / alpha1
 
-    dydt1 = math.cos(theta1) * (L2 * math.cos(theta2) + L3 * math.cos(theta2 + theta3))
-    dydt2 = -math.sin(theta1) * (L2 * math.sin(theta2) + L3 * math.sin(theta2 + theta3))
-    dydt3 = -math.sin(theta1) * L3 * math.sin(theta2 + theta3)
-
-    dzdt1 = 0
-    dzdt2 = L2 * math.cos(theta2) + L3 * math.cos(theta2 + theta3)
-    dzdt3 = L3 * math.cos(theta2 + theta3)
-
-    return np.array([[dxdt1, dxdt2, dxdt3],
-                     [dydt1, dydt2, dydt3],
-                     [dzdt1, dzdt2, dzdt3]], dtype=float)
-
-
-def inverse_jacobian(j):
-    return np.linalg.pinv(j)
-
+    return np.array([[J11, J12, J13],
+                     [J21, J22, J23],
+                     [J31, J32, J33]], dtype=float)
 
 def iteracao(q0, X0, Xa):
-    Jinv = inverse_jacobian(jacobian(q0[0], q0[1], q0[2]))
+    Jinv = inverse_jacobian(q0[0], q0[1], q0[2])
     dX = Xa - X0
     return q0 + 0.5 * (Jinv.dot(dX))
-
-
-def calcular_alvo_virtual(xa, ya, za):
-    r_alvo = math.sqrt(xa**2 + ya**2)
-    theta_base = math.atan2(ya, xa)
-    r_virtual = r_alvo - OFFSET_R
-    z_virtual = za - OFFSET_Z
-    x_virtual = r_virtual * math.cos(theta_base)
-    y_virtual = r_virtual * math.sin(theta_base)
-    return x_virtual, y_virtual, z_virtual
 
 
 def solve(theta1, theta2, theta3, xa, ya, za):
     q0 = np.array([theta1, theta2, theta3])
     X0 = np.array([calc_x(q0[0], q0[1], q0[2]), calc_y(q0[0], q0[1], q0[2]), calc_z(q0[0], q0[1], q0[2])])
 
-    v_x, v_y, v_z = calcular_alvo_virtual(xa, ya, za)
-    Xa = np.array([v_x, v_y, v_z])
+    Xa = np.array([xa, ya, za])
 
     iteracoes = 0
     max_iter = 1000
