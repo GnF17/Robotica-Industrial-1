@@ -6,7 +6,7 @@ import time
 L1 = 90.0
 L2 = 90.0
 OFFSET_R = 30.0
-OFFSET_Z = 40.0
+OFFSET_Z = 50.0
 PASSOS_POR_REVOLUCAO = 4096
 
 PORTA_SERIAL = '/dev/ttyUSB0'
@@ -78,8 +78,7 @@ def solve(theta1, theta2, theta3, xa, ya, za):
 
 
 def converter_delta_angulo_para_passos(delta_angulo_rad):
-    delta_normalizado = math.atan2(math.sin(delta_angulo_rad), math.cos(delta_angulo_rad))
-    return int(round((math.degrees(delta_normalizado) / 360.0) * PASSOS_POR_REVOLUCAO))
+    return int((delta_angulo_rad / 360.0) * PASSOS_POR_REVOLUCAO)
 
 
 def converter_delta_para_passos(q_atual_rad, q_novo_rad):
@@ -89,6 +88,8 @@ def converter_delta_para_passos(q_atual_rad, q_novo_rad):
         converter_delta_angulo_para_passos(q_novo_rad[2] - q_atual_rad[2]),
     ]
 
+def angulo_para_passos_absolutos(angulo_rad):
+    return int(round((angulo_rad/(2*math.pi)) * PASSOS_POR_REVOLUCAO))
 
 def solicitar_ponto():
     while True:
@@ -118,9 +119,10 @@ def solicitar_modo():
 def enviar_para_arduino(modo, passos_delta):
     delta_b = int(passos_delta[0])
     delta_o = int(passos_delta[1])
-    delta_c = int(passos_delta[2])
+    delta_c = int(passos_delta[2]) + delta_o  # O cotovelo deve andar junto com o ombro, pois como o motor esta na base ele nao gira junto. Por isso a soma com o delta_o
 
     if arduino and arduino.is_open:
+        arduino.reset_input_buffer()
         comando = f"<{modo},{delta_b},{delta_o},{delta_c}>\n"
         arduino.write(comando.encode('utf-8'))
         print(f"Enviado: {comando.strip()}")
@@ -137,10 +139,17 @@ def enviar_para_arduino(modo, passos_delta):
 # ==========================================
 
 q_atual = [
-    math.radians(0),
+    math.radians(90),
     math.radians(90),
     math.radians(-90)
 ]
+
+passos_atuais = [
+        angulo_para_passos_absolutos(q_atual[0]),
+        angulo_para_passos_absolutos(q_atual[1]),
+        angulo_para_passos_absolutos(q_atual[2])
+]
+
 
 print("Controle interativo iniciado. Digite 'sair' para encerrar.")
 
@@ -162,8 +171,27 @@ while True:
 
     print(f"Ângulos Finais (Radianos): Base={q_novo[0]:.3f}, Ombro={q_novo[1]:.3f}, Cotovelo={q_novo[2]:.3f}")
 
-    passos_delta = converter_delta_para_passos(q_atual, q_novo)
+    passos_novos = [
+        angulo_para_passos_absolutos(q_novo[0]),
+        angulo_para_passos_absolutos(q_novo[1]),
+        angulo_para_passos_absolutos(q_novo[2])
+    ]
+
+    # CORRIGIDO: O delta real deve vir estritamente da diferença dos inteiros absolutos calculados
+    passos_delta = [
+        passos_novos[0] - passos_atuais[0],
+        passos_novos[1] - passos_atuais[1],
+        passos_novos[2] - passos_atuais[2]
+    ]
+    
     print(f"Passos de deslocamento: Base={passos_delta[0]}, Ombro={passos_delta[1]}, Cotovelo={passos_delta[2]}")
 
     enviar_para_arduino(modo, passos_delta)
-    q_atual = q_novo
+    
+    # Atualiza as referências salvando o ponto para onde o motor de fato foi
+    passos_atuais = passos_novos
+    q_atual = [
+        (passos_atuais[0] / PASSOS_POR_REVOLUCAO) * (2 * math.pi),
+        (passos_atuais[1] / PASSOS_POR_REVOLUCAO) * (2 * math.pi),
+        (passos_atuais[2] / PASSOS_POR_REVOLUCAO) * (2 * math.pi)
+    ]
